@@ -1,0 +1,13 @@
+{
+  "name": "four-hands",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "npx http-server public -p 8080",
+    "serve": "npx http-server public -p 8080",
+    "docker:build": "docker build -t four-hands:latest ."
+  },
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
+}

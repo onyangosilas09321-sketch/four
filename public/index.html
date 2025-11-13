@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>FOUR HANDS</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/parse@6.1.1/dist/parse.min.js"></script>
+<script>Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com';</script>
+<link rel="stylesheet" href="/css/custom.css"/>
+</head>
+<body class="bg-neutral-50 text-neutral-900">
+<header class="bg-white border-b border-neutral-200">
+  <nav class="container mx-auto px-4 h-16 flex items-center justify-between">
+    <a href="/" class="font-semibold">FOUR HANDS</a>
+    <div class="flex items-center gap-3 text-sm">
+      <a href="/" class="hover:underline">Dashboard</a>
+      <a href="/pages/trades.html" class="hover:underline">Trades</a>
+      <a href="/pages/settings.html" class="hover:underline">Settings</a>
+      <input id="inpAppId" placeholder="Deriv App ID" class="h-9 px-3 rounded-lg border w-36"/>
+      <input id="inpToken" placeholder="Deriv API Token" type="password" class="h-9 px-3 rounded-lg border w-44"/>
+      <button id="btnConnect" class="h-9 px-4 rounded-lg bg-neutral-900 text-white">Connect</button>
+    </div>
+  </nav>
+</header>
+<main class="container mx-auto px-4 py-10">
+  <section class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+    <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Account Balance</p><h3 id="account-balance" class="text-2xl font-semibold">—</h3><p class="text-sm">Currency: <span id="currency">USD</span></p></div>
+    <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Live R_10 Price</p><h3 id="live-price" class="text-2xl font-semibold">—</h3><p class="text-sm">Epoch: <span id="live-epoch">—</span></p></div>
+    <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Ticks Received</p><h3 id="tick-count" class="text-2xl font-semibold">0</h3><p class="text-sm">Stream status: <span id="tick-status" class="text-amber-600">Disconnected</span></p></div>
+    <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Live Signal (Over 2)</p><h3 id="live-signal" class="text-2xl font-semibold">—</h3><p class="text-sm">Confidence: <span id="live-prob">—</span></p></div>
+  </section>
+
+  <section class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="rounded-2xl border bg-white p-5">
+      <h3 class="text-lg font-semibold mb-4">Manual Trade (Over 2)</h3>
+      <div class="flex flex-wrap gap-3 items-end">
+        <div><label class="text-sm">Stake (USD)</label><input id="stake" type="number" value="10" class="w-40 h-11 rounded-xl border px-3"/></div>
+        <div class="flex gap-2">
+          <button id="btnOver2" class="h-11 px-5 rounded-xl bg-neutral-900 text-white">Trade Over 2 (1 tick)</button>
+        </div>
+      </div>
+    </div>
+    <div class="rounded-2xl border bg-white p-5">
+      <h3 class="text-lg font-semibold mb-4">Auto Trade Progression</h3>
+      <div class="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div>
+          <label class="text-sm">Auto stake</label>
+          <input id="autoStake" type="number" step="0.01" min="0.1" class="h-11 w-full rounded-xl border px-3" placeholder="1.00"/>
+        </div>
+        <div>
+          <label class="text-sm">Progression</label>
+          <select id="progMode" class="h-11 w-full rounded-xl border px-3">
+            <option value="none">None</option>
+            <option value="mg">Martingale</option>
+            <option value="og">Oscar Grind</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm flex items-center gap-2"><input id="optMartingale" type="checkbox" class="h-4 w-4">Martingale</label>
+        </div>
+        <div>
+          <label class="text-sm flex items-center gap-2"><input id="optOscar" type="checkbox" class="h-4 w-4">Oscar Grind</label>
+        </div>
+        <div>
+          <label class="text-sm">MG Factor</label>
+          <input id="mgFactor" type="number" step="0.1" min="1.1" class="h-11 w-full rounded-xl border px-3" placeholder="2"/>
+        </div>
+        <div>
+          <label class="text-sm">MG Max steps</label>
+          <input id="mgMax" type="number" step="1" min="0" class="h-11 w-full rounded-xl border px-3" placeholder="3"/>
+        </div>
+      </div>
+      <div class="mt-4">
+        <button id="btnAuto" class="h-11 w-full rounded-xl bg-emerald-600 text-white">Start Auto-Trade</button>
+      </div>
+      <p class="text-sm text-neutral-500 mt-2">Auto-trade uses staged thresholds (60% → 65% → 68%) with 5s cooldowns, canTrade guard. Martingale and Oscar Grind optional.</p>
+    </div>
+  </section>
+
+  <section class="mt-8 rounded-2xl border bg-white p-5">
+    <h3 class="text-lg font-semibold mb-4">Recent Trades (Logs)</h3>
+    <div id="recent-trades" class="space-y-2 text-sm"></div>
+  </section>
+</main>
+<script src="/js/ui.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/features.js"></script>
+<script src="/js/ml.js"></script>
+<script src="/js/analysis.js"></script>
+<script src="/js/signal.js"></script>
+<script src="/js/deriv.js"></script>
+<script src="/js/trader.js"></script>
+<script src="/js/autoAgent.js"></script>
+<script src="/js/tradesLive.js"></script>
+<script>
+  window.TradeConfig = { stake:()=>parseFloat(document.getElementById('stake').value||'0') };
+  document.addEventListener('DOMContentLoaded', async () => {
+    const a=localStorage.getItem('deriv_app_id'), t=localStorage.getItem('deriv_token');
+    const appEl=document.getElementById('inpAppId'); const tokEl=document.getElementById('inpToken');
+    appEl.value=a||''; tokEl.value=t||'';
+    document.getElementById('btnConnect').onclick=()=>{ Deriv.connect(appEl.value, tokEl.value); document.getElementById('tick-status').textContent='Connecting'; AutoAgent.reload && AutoAgent.reload(); };
+    if(a && t){ Deriv.connect(a,t); document.getElementById('tick-status').textContent='Connecting'; AutoAgent.reload && AutoAgent.reload(); }
+
+    document.getElementById('btnOver2').onclick = ()=>{ const amt=TradeConfig.stake(); Trader.tradeOver2(amt); };
+
+    const autoStakeEl=document.getElementById('autoStake'); autoStakeEl.value = localStorage.getItem('auto_stake_base')||localStorage.getItem('auto_stake')||'1';
+    autoStakeEl.onchange = (e)=>{ const v = parseFloat(e.target.value||'0'); if(v>0){ localStorage.setItem('auto_stake_base', String(v)); localStorage.setItem('auto_stake', String(v)); } };
+
+    const progSelect=document.getElementById('progMode'); progSelect.value = localStorage.getItem('prog_mode')||'none';
+    const optionalMG=document.getElementById('optMartingale'), optionalOG=document.getElementById('optOscar');
+    function updateOptionalCheck(){ const cur=progSelect.value; optionalMG.checked = cur==='mg'; optionalOG.checked = cur==='og'; }
+    updateOptionalCheck();
+    progSelect.onchange=()=>{ localStorage.setItem('prog_mode', progSelect.value); updateOptionalCheck(); };
+    optionalMG.onchange=()=>{ if(optionalMG.checked){ progSelect.value='mg'; localStorage.setItem('prog_mode','mg'); optionalOG.checked=false; } else if(!optionalOG.checked){ progSelect.value='none'; localStorage.setItem('prog_mode','none'); } };
+    optionalOG.onchange=()=>{ if(optionalOG.checked){ progSelect.value='og'; localStorage.setItem('prog_mode','og'); optionalMG.checked=false; } else if(!optionalMG.checked){ progSelect.value='none'; localStorage.setItem('prog_mode','none'); } };
+
+    const mgF=document.getElementById('mgFactor'); const mgM=document.getElementById('mgMax');
+    mgF.value = localStorage.getItem('mg_factor')||'2'; mgM.value = localStorage.getItem('mg_max_steps')||'3';
+    mgF.onchange=()=>localStorage.setItem('mg_factor', mgF.value||'2');
+    mgM.onchange=()=>localStorage.setItem('mg_max_steps', mgM.value||'3');
+
+    const btnAuto=document.getElementById('btnAuto');
+    function setBtn(){ const on=localStorage.getItem('auto_on')==='1'; btnAuto.textContent = on? 'Stop Auto-Trade' : 'Start Auto-Trade'; btnAuto.className = on? 'h-11 w-full rounded-xl bg-red-600 text-white' : 'h-11 w-full rounded-xl bg-emerald-600 text-white'; }
+    setBtn();
+    btnAuto.onclick=()=>{ const on=localStorage.getItem('auto_on')==='1'; localStorage.setItem('auto_on', on? '0':'1'); setBtn(); };
+
+    document.addEventListener('tick-count', (e)=>{ document.getElementById('tick-count').textContent = e.detail; document.getElementById('tick-status').textContent='Live'; const s = (window.Analysis&&window.Analysis.score)? window.Analysis.score(): (Signal.score? Signal.score():null); if(s&&s.ready){ document.getElementById('live-prob').textContent=(s.confidence*100).toFixed(1)+'%'; document.getElementById('live-signal').textContent = s.suggest==='OVER2' ? 'OVER 2' : 'WAIT'; document.getElementById('live-signal').className = s.suggest==='OVER2' ? 'text-emerald-600 text-2xl font-semibold' : 'text-amber-600 text-2xl font-semibold'; } });
+
+    document.addEventListener('balance-update', (e)=>{ const b=e.detail.balance, c=e.detail.currency||'USD'; document.getElementById('account-balance').textContent=`${c} ${Number(b).toFixed(2)}`; document.getElementById('currency').textContent=c; });
+
+    Deriv.onTick((tick)=>{ document.getElementById('live-price').textContent = Number(tick.quote).toFixed(2); document.getElementById('live-epoch').textContent = tick.epoch; });
+  });
+</script>
+</body>
+</html>
