@@ -1,22 +1,67 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
+/**
+ * API Wrapper - Uses Supabase + IndexedDB (no Parse Server)
+ * All calls go to SupabaseDB which syncs with Supabase REST API
+ */
 window.API = {
-  async getMetrics(){ return await Parse.Cloud.run('getMetrics'); },
-  async listTrades(params){ return await Parse.Cloud.run('listTrades', params||{}); },
-  async controlPause(){ return await Parse.Cloud.run('controlPause'); },
-  async controlResume(){ return await Parse.Cloud.run('controlResume'); },
-  async emergencyStop(){ return await Parse.Cloud.run('emergencyStop'); },
-  async getSettings(){ return await Parse.Cloud.run('getSettings'); },
-  async saveSettings(p){ return await Parse.Cloud.run('saveSettings', p||{}); },
-  async mlPerformance(){ return await Parse.Cloud.run('mlPerformance'); },
-  async mlAccuracy(p){ return await Parse.Cloud.run('mlAccuracy', p||{}); },
-  async mlRetrain(){ return await Parse.Cloud.run('mlRetrain'); },
-  async saveTick(p){ return await Parse.Cloud.run('saveTick', p||{}); },
-  async trainModel(p){ return await Parse.Cloud.run('trainModel', p||{}); },
-  async getModel(){ return await Parse.Cloud.run('getModel'); },
-  async predict(p){ return await Parse.Cloud.run('predict', p||{}); },
-  async saveOrder(p){ return await Parse.Cloud.run('saveOrder', p||{}); },
-  async recordTrade(p){ return await Parse.Cloud.run('recordTrade', p||{}); },
-  async updateBalance(p){ return await Parse.Cloud.run('updateBalance', p||{}); },
-  async canTrade(){ return await Parse.Cloud.run('canTrade'); },
-  async listCandles(p){ return await Parse.Cloud.run('listCandles', p||{}); }
+  async getMetrics(){ return await window.SupabaseDB.getMetrics(); },
+  async listTrades(params){ return await window.SupabaseDB.listTrades(params?.limit || 100); },
+  async getSettings(){ return await window.SupabaseDB.getSettings(); },
+  async saveSettings(p){ return await window.SupabaseDB.saveSettings(p||{}); },
+  async saveTick(p){ const { epoch, symbol, quote } = p||{}; return await window.SupabaseDB.saveTick(epoch, symbol, quote); },
+  async recordTrade(p){ return await window.SupabaseDB.recordTrade(p||{}); },
+  async updateBalance(p){ return await window.SupabaseDB.saveSettings(p||{}); },
+  async canTrade(){ return await window.SupabaseDB.canTrade(); },
+  
+  // ML functions still use cloud endpoints if available, fall back to local ML
+  async trainTensorFlowModel(params = {}) {
+    try {
+      return await fetch('/api/ml/train', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(params)
+      }).then(r => r.json());
+    } catch (error) {
+      console.warn('TensorFlow training not available:', error);
+      return { success: false, error: 'ML service unavailable' };
+    }
+  },
+
+  async predictTensorFlow(quotes = []) {
+    try {
+      return await fetch('/api/ml/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotes })
+      }).then(r => r.json());
+    } catch (error) {
+      console.warn('TensorFlow prediction not available:', error);
+      return { success: false, error: 'ML service unavailable' };
+    }
+  },
+
+  async analyzeSentiment(texts = [], newsArticles = []) {
+    try {
+      return await fetch('/api/ml/sentiment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texts, newsArticles })
+      }).then(r => r.json());
+    } catch (error) {
+      console.warn('Sentiment analysis not available:', error);
+      return { success: false, error: 'Sentiment service unavailable' };
+    }
+  },
+
+  async generateUnifiedSignal(quotes = [], newsTexts = [], accountBalance = 0, dailyLoss = 0) {
+    try {
+      return await fetch('/api/ml/signal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotes, newsTexts, accountBalance, dailyLoss })
+      }).then(r => r.json());
+    } catch (error) {
+      console.warn('Signal generation not available:', error);
+      return { success: false, error: 'Signal service unavailable' };
+    }
+  }
 };

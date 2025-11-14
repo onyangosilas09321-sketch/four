@@ -1,4 +1,3 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
 // Trader orchestrates safe manual trading for R_10 DIGITOVER barrier 2
 (function(){
   const STATE = { inFlight:false, lastManual:0, manualCooldownMs:2000 };

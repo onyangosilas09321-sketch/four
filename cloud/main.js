@@ -129,3 +129,288 @@ Parse.Cloud.define('mlPerformance', async (req)=>{
 });
 
 Parse.Cloud.define('mlRetrain', async (req)=>{ const opts=req.params||{}; return await Parse.Cloud.run('trainModel', opts, { useMasterKey:true }); });
+
+// ==================== NEW: TensorFlow + Sentiment Analysis ====================
+
+const tfML = require('./lib/tensorflowML');
+const sentiment = require('./lib/sentimentAnalysis');
+const signalGen = require('./lib/signalGeneration');
+
+/**
+ * Train TensorFlow LSTM model on historical data
+ */
+Parse.Cloud.define('trainTensorFlowModel', async (req) => {
+  try {
+    const { epochs = 50, batchSize = 32, modelType = 'lstm' } = req.params || {};
+    
+    const q = new Parse.Query('Tick');
+    q.descending('epoch');
+    q.limit(5000);
+    const ticks = await q.find({ useMasterKey: true });
+    
+    if (!ticks || ticks.length < 200) {
+      throw 'Insufficient tick data for training';
+    }
+
+    const quotes = ticks.map(t => Number(t.get('quote') || 0)).reverse();
+    const epochs_arr = ticks.map(t => Math.floor((t.get('ts') || t.createdAt).getTime() / 1000)).reverse();
+
+    // Create sequences
+    const sequenceLength = 60;
+    const sequences = tfML.dataPreprocessing.createSequences(quotes, sequenceLength, 5);
+    
+    if (sequences.length < 100) {
+      throw 'Insufficient sequences for training';
+    }
+
+    // Create labels (1 if next price > current, 0 otherwise)
+    const labels = sequences.map((seq, i) => {
+      const nextIdx = (i * 5) + sequenceLength;
+      return nextIdx < quotes.length && quotes[nextIdx] > seq[seq.length - 1] ? 1 : 0;
+    });
+
+    // Normalize features
+    const flatQuotes = quotes.flat();
+    const minQ = Math.min(...flatQuotes);
+    const maxQ = Math.max(...flatQuotes);
+    
+    const X_normalized = sequences.map(seq => 
+      seq.map(q => (q - minQ) / (maxQ - minQ + 1e-8))
+    );
+
+    // Train model
+    const model = tfML.createModel(sequenceLength, 1);
+    
+    if (modelType === 'cnn') {
+      model.buildCNNModel();
+    } else {
+      model.buildLSTMModel();
+    }
+
+    const history = await model.train(X_normalized, labels.map(l => [l]), {
+      epochs,
+      batchSize,
+      validationSplit: 0.2,
+      modelType
+    });
+
+    // Save model
+    const weights = await model.saveWeights();
+    const M = await getSingleton('TensorFlowModel');
+    M.set('modelType', modelType);
+    M.set('weights', weights);
+    M.set('sequenceLength', sequenceLength);
+    M.set('normalization', { min: minQ, max: maxQ });
+    M.set('trainedAt', new Date());
+    M.set('history', history.history);
+    await M.save(null, { useMasterKey: true });
+
+    return {
+      success: true,
+      model: {
+        type: modelType,
+        version: M.id,
+        history: history.history,
+        trained: true
+      }
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
+/**
+ * Predict using TensorFlow model
+ */
+Parse.Cloud.define('predictTensorFlow', async (req) => {
+  try {
+    const { quotes = [] } = req.params || {};
+    
+    if (!quotes || quotes.length < 60) {
+      throw 'Need at least 60 quotes for prediction';
+    }
+
+    const M = await getSingleton('TensorFlowModel');
+    const modelData = M.get('weights');
+    const norm = M.get('normalization') || { min: Math.min(...quotes), max: Math.max(...quotes) };
+
+    if (!modelData) {
+      throw 'No trained model found';
+    }
+
+    // Normalize input
+    const normalized = quotes.slice(-60).map(q => 
+      (q - norm.min) / (norm.max - norm.min + 1e-8)
+    );
+
+    // Create model and load weights
+    const model = tfML.createModel(60, 1);
+    model.buildLSTMModel();
+    model.loadWeights(modelData);
+
+    // Predict
+    const prediction = model.predict(normalized);
+    model.dispose();
+
+    return {
+      success: true,
+      prediction: {
+        confidence: prediction.confidence,
+        direction: prediction.prediction === 1 ? 'UP' : 'DOWN',
+        probability: prediction.probability
+      }
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
+/**
+ * Analyze market sentiment from headlines/news
+ */
+Parse.Cloud.define('analyzeSentiment', async (req) => {
+  try {
+    const { texts = [], newsArticles = [] } = req.params || {};
+    
+    const analyzer = sentiment.getInstance();
+
+    let result;
+    if (newsArticles && newsArticles.length > 0) {
+      result = await analyzer.analyzeNews(newsArticles);
+    } else if (texts && texts.length > 0) {
+      result = await analyzer.analyzeMultiple(texts);
+    } else {
+      throw 'No texts or articles provided';
+    }
+
+    return {
+      success: true,
+      sentiment: result
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
+/**
+ * Detect trading signals from text using keyword analysis
+ */
+Parse.Cloud.define('detectTradingSignals', async (req) => {
+  try {
+    const { text = '' } = req.params || {};
+    
+    const analyzer = sentiment.getInstance();
+    const signals = analyzer.detectTradingSignals(text);
+
+    return {
+      success: true,
+      signals
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
+/**
+ * Generate unified trading signal from multiple sources
+ */
+Parse.Cloud.define('generateUnifiedSignal', async (req) => {
+  try {
+    const {
+      quotes = [],
+      newsTexts = [],
+      accountBalance = 0,
+      dailyLoss = 0
+    } = req.params || {};
+
+    // Get TensorFlow prediction
+    let tfResult = null;
+    if (quotes && quotes.length >= 60) {
+      tfResult = await Parse.Cloud.run('predictTensorFlow', 
+        { quotes }, 
+        { useMasterKey: true }
+      );
+    }
+
+    // Get sentiment analysis
+    let sentimentResult = null;
+    if (newsTexts && newsTexts.length > 0) {
+      sentimentResult = await Parse.Cloud.run('analyzeSentiment',
+        { texts: newsTexts },
+        { useMasterKey: true }
+      );
+    }
+
+    // Get legacy ensemble prediction
+    let ensembleResult = null;
+    if (quotes) {
+      ensembleResult = await Parse.Cloud.run('predict',
+        { quotes, epochs: [] },
+        { useMasterKey: true }
+      );
+    }
+
+    // Generate unified signal
+    const generator = signalGen.createGenerator();
+    const inputs = {
+      tfPrediction: tfResult?.prediction || null,
+      sentiment: sentimentResult?.sentiment || null,
+      ensemblePredicton: ensembleResult?.data?.probability || null,
+      accountBalance,
+      dailyLoss
+    };
+
+    const signal = generator.generateSignal(inputs);
+
+    // Save signal to database
+    const S = Parse.Object.extend('UnifiedSignal');
+    const signalObj = new S();
+    signalObj.set('signal', signal.signal);
+    signalObj.set('action', signal.action);
+    signalObj.set('confidence', signal.confidence);
+    signalObj.set('positionSize', signal.positionSize);
+    signalObj.set('recommendation', signal.recommendation);
+    signalObj.set('components', signal.scores);
+    signalObj.set('timestamp', new Date(signal.timestamp));
+    await signalObj.save(null, { useMasterKey: true });
+
+    return {
+      success: true,
+      signal
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});
+
+/**
+ * Get signal performance metrics
+ */
+Parse.Cloud.define('getSignalPerformance', async (req) => {
+  try {
+    const q = new Parse.Query('UnifiedSignal');
+    q.descending('timestamp');
+    q.limit(100);
+    const signals = await q.find({ useMasterKey: true });
+
+    const buys = signals.filter(s => s.get('action') === 'BUY').length;
+    const sells = signals.filter(s => s.get('action') === 'SELL').length;
+    const holds = signals.filter(s => s.get('action') === 'HOLD').length;
+    const avgConfidence = signals.length > 0
+      ? signals.reduce((sum, s) => sum + (s.get('confidence') || 0), 0) / signals.length
+      : 0;
+
+    return {
+      success: true,
+      performance: {
+        totalSignals: signals.length,
+        buySignals: buys,
+        sellSignals: sells,
+        holdSignals: holds,
+        averageConfidence: avgConfidence
+      }
+    };
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});

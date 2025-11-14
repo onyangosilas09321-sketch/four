@@ -1,4 +1,3 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
 window.Charts={
   simpleLine(id,data,labels){const ctx=document.getElementById(id).getContext('2d');return new Chart(ctx,{type:'line',data:{labels:labels||data.map((_,i)=>i+1),datasets:[{data,borderColor:'#2563EB',backgroundColor:'rgba(37,99,235,.1)',tension:.3,fill:true}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});},
   simpleDoughnut(id,labels,data){const ctx=document.getElementById(id).getContext('2d');return new Chart(ctx,{type:'doughnut',data:{labels,datasets:[{data,backgroundColor:['#10B981','#EF4444']}]},options:{plugins:{legend:{position:'bottom'}}}});},

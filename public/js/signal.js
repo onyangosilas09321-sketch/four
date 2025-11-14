@@ -1,4 +1,3 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
 // Indicator-based Signal Engine for R_10 Over 2 (no external libs)
 (function(){
   function lastDigit(q){ const s=String(q).replace(/\D/g,''); return s.length? Number(s[s.length-1]):0; }

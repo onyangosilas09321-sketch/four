@@ -1,4 +1,3 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
 // AutoAgent: staged threshold controller using Analysis.score() when available; fallbacks keep existing behavior
 (function(){
   let inFlight=false; let lastTradeAt=0; let ticksSeen=0; const minTicks=10; const stageCooldownMs=5000; const T1=0.60, T2=0.65, T3=0.68; let stage=0;

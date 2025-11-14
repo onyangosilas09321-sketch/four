@@ -1,4 +1,3 @@
-if(!window.__parseInited){Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com'; window.__parseInited=true; }
 // Deriv trading engine (browser WebSocket) with proposal -> buy flow (Over 2) + MG/OG compatible
 window.Deriv = (function(){
   let ws=null, appId=null, token=null; let tickCount=0; let backoff=1000; let authorized=false;

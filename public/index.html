@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>FOUR HANDS</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/parse@6.1.1/dist/parse.min.js"></script>
-<script>Parse.initialize('61rFcyb3ekS16wLu1CvZE1CRVRFRtFx4vXiDtSu7','Wtn21iCjq808ZOen9yO2P1IH7Rzf6kahhcspUWWS'); Parse.serverURL='https://parseapi.back4app.com';</script>
+<!-- Database: Supabase + IndexedDB (no Parse Server) -->
+<script src="/js/localdb.js"></script>
+<script src="/js/supabase.js"></script>
 <link rel="stylesheet" href="/css/custom.css"/>
 </head>
 <body class="bg-neutral-50 text-neutral-900">
@@ -24,11 +25,12 @@
   </nav>
 </header>
 <main class="container mx-auto px-4 py-10">
-  <section class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+  <section class="grid grid-cols-1 sm:grid-cols-5 gap-4">
     <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Account Balance</p><h3 id="account-balance" class="text-2xl font-semibold">—</h3><p class="text-sm">Currency: <span id="currency">USD</span></p></div>
     <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Live R_10 Price</p><h3 id="live-price" class="text-2xl font-semibold">—</h3><p class="text-sm">Epoch: <span id="live-epoch">—</span></p></div>
     <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Ticks Received</p><h3 id="tick-count" class="text-2xl font-semibold">0</h3><p class="text-sm">Stream status: <span id="tick-status" class="text-amber-600">Disconnected</span></p></div>
     <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Live Signal (Over 2)</p><h3 id="live-signal" class="text-2xl font-semibold">—</h3><p class="text-sm">Confidence: <span id="live-prob">—</span></p></div>
+    <div class="rounded-2xl border bg-white p-5"><p class="text-sm text-neutral-600">Session P&L</p><h3 id="session-pnl" class="text-2xl font-semibold text-neutral-600">$0.00</h3><p class="text-sm">Trades: <span id="session-trades">0</span></p></div>
   </section>
 
   <section class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -82,6 +84,17 @@
     <h3 class="text-lg font-semibold mb-4">Recent Trades (Logs)</h3>
     <div id="recent-trades" class="space-y-2 text-sm"></div>
   </section>
+
+  <section class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="rounded-2xl border bg-white p-5">
+      <h3 class="text-lg font-semibold mb-4">Live Price Chart</h3>
+      <canvas id="priceChart" height="160"></canvas>
+    </div>
+    <div class="rounded-2xl border bg-white p-5">
+      <h3 class="text-lg font-semibold mb-4">Session P&L Chart</h3>
+      <canvas id="pnlChart" height="160"></canvas>
+    </div>
+  </section>
 </main>
 <script src="/js/ui.js"></script>
 <script src="/js/api.js"></script>
@@ -93,14 +106,49 @@
 <script src="/js/trader.js"></script>
 <script src="/js/autoAgent.js"></script>
 <script src="/js/tradesLive.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   window.TradeConfig = { stake:()=>parseFloat(document.getElementById('stake').value||'0') };
+
+  // Lightweight charts state
+  let priceData = []; let priceLabels = [];
+  let pnlData = []; let pnlLabels = [];
+  let priceChart = null; let pnlChart = null;
+  let sessionStartBalance = null; let sessionTrades = 0;
+
+  function setupCharts(){
+    const priceCtx = document.getElementById('priceChart').getContext('2d');
+    priceChart = new Chart(priceCtx, {
+      type: 'line', data: { labels: priceLabels, datasets: [{ label: 'R_10 Price', data: priceData, borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.08)', tension:0.2 }] }, options: { animation:false, plugins:{legend:{display:false}}, scales:{x:{display:false}} }
+    });
+    const pnlCtx = document.getElementById('pnlChart').getContext('2d');
+    pnlChart = new Chart(pnlCtx, {
+      type: 'line', data: { labels: pnlLabels, datasets: [{ label: 'Session P&L', data: pnlData, borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.06)', tension:0.2 }] }, options: { animation:false, plugins:{legend:{display:false}}, scales:{x:{display:false}} }
+    });
+  }
+
+  function pushPrice(val){
+    const ts = new Date().toLocaleTimeString();
+    priceLabels.push(ts); priceData.push(Number(val));
+    if(priceLabels.length>200){ priceLabels.shift(); priceData.shift(); }
+    if(priceChart) priceChart.update('none');
+  }
+
+  function pushPnl(val){
+    const ts = new Date().toLocaleTimeString();
+    pnlLabels.push(ts); pnlData.push(Number(val));
+    if(pnlLabels.length>200){ pnlLabels.shift(); pnlData.shift(); }
+    if(pnlChart) pnlChart.update('none');
+  }
+
   document.addEventListener('DOMContentLoaded', async () => {
+    setupCharts();
+
     const a=localStorage.getItem('deriv_app_id'), t=localStorage.getItem('deriv_token');
     const appEl=document.getElementById('inpAppId'); const tokEl=document.getElementById('inpToken');
     appEl.value=a||''; tokEl.value=t||'';
     document.getElementById('btnConnect').onclick=()=>{ Deriv.connect(appEl.value, tokEl.value); document.getElementById('tick-status').textContent='Connecting'; AutoAgent.reload && AutoAgent.reload(); };
-    if(a && t){ Deriv.connect(a,t); document.getElementById('tick-status').textContent='Connecting'; AutoAgent.reload && AutoAgent.reload(); }
+    if(a && t){ /* do not auto-connect to avoid accidental trading, leave Connect for user */ }
 
     document.getElementById('btnOver2').onclick = ()=>{ const amt=TradeConfig.stake(); Trader.tradeOver2(amt); };
 
@@ -127,9 +175,28 @@
 
     document.addEventListener('tick-count', (e)=>{ document.getElementById('tick-count').textContent = e.detail; document.getElementById('tick-status').textContent='Live'; const s = (window.Analysis&&window.Analysis.score)? window.Analysis.score(): (Signal.score? Signal.score():null); if(s&&s.ready){ document.getElementById('live-prob').textContent=(s.confidence*100).toFixed(1)+'%'; document.getElementById('live-signal').textContent = s.suggest==='OVER2' ? 'OVER 2' : 'WAIT'; document.getElementById('live-signal').className = s.suggest==='OVER2' ? 'text-emerald-600 text-2xl font-semibold' : 'text-amber-600 text-2xl font-semibold'; } });
 
-    document.addEventListener('balance-update', (e)=>{ const b=e.detail.balance, c=e.detail.currency||'USD'; document.getElementById('account-balance').textContent=`${c} ${Number(b).toFixed(2)}`; document.getElementById('currency').textContent=c; });
+    document.addEventListener('balance-update', (e)=>{
+      const b = Number(e.detail.balance);
+      const c = e.detail.currency||'USD';
+      document.getElementById('account-balance').textContent = `${c} ${b.toFixed(2)}`;
+      document.getElementById('currency').textContent = c;
+      if(sessionStartBalance===null) sessionStartBalance = b;
+      const pnl = b - (sessionStartBalance||0);
+      document.getElementById('session-pnl').textContent = (pnl>=0? '$':'-$') + Math.abs(pnl).toFixed(2);
+      pushPnl(pnl);
+    });
 
-    Deriv.onTick((tick)=>{ document.getElementById('live-price').textContent = Number(tick.quote).toFixed(2); document.getElementById('live-epoch').textContent = tick.epoch; });
+    // tick updates: update live price and append to chart
+    Deriv.onTick((tick)=>{
+      const q = Number(tick.quote);
+      document.getElementById('live-price').textContent = q.toFixed(2);
+      document.getElementById('live-epoch').textContent = tick.epoch;
+      pushPrice(q);
+    });
+
+    // if other parts of the app emit trade events, listen and count them
+    document.addEventListener('trade-closed', (e)=>{ sessionTrades++; document.getElementById('session-trades').textContent = sessionTrades; if(e.detail && typeof e.detail.pnl!=='undefined'){ pushPnl(e.detail.pnl); } });
+
   });
 </script>
 </body>
